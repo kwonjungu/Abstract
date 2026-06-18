@@ -1,0 +1,32 @@
+* { box-sizing: border-box; font-family: "맑은 고딕", "Segoe UI", sans-serif; }
+html, body { margin: 0; height: 100%; background: #0b1020; color: #e2e8f0; overflow: hidden; }
+
+#bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding: 8px 12px; background: rgba(15, 23, 42, .92);
+  backdrop-filter: blur(6px); border-bottom: 1px solid #334155;
+}
+.title { color: #fff; font-size: 14px; }
+.g { display: flex; gap: 4px; align-items: center; background: #0f172a;
+     border: 1px solid #334155; border-radius: 10px; padding: 4px 8px; }
+.g .l { font-size: 10px; color: #94a3b8; }
+button { font-family: inherit; cursor: pointer; border-radius: 8px;
+         border: 1px solid #475569; background: #334155; color: #e2e8f0;
+         font-size: 13px; padding: 6px 9px; }
+button:hover { background: #475569; }
+button.on { background: #10b981; border-color: #10b981; color: #06241b; font-weight: bold; }
+.pal { font-size: 17px; width: 38px; height: 34px; padding: 0; }
+input[type=number] { width: 42px; background: #0f172a; color: #e2e8f0;
+  border: 1px solid #475569; border-radius: 6px; padding: 4px; }
+label.f { font-size: 11px; color: #cbd5e1; display: flex; align-items: center; gap: 2px; }
+
+#cv { position: fixed; inset: 0; display: block; }
+
+#hud { position: fixed; left: 12px; bottom: 12px; z-index: 10; font-size: 12px;
+  color: #94a3b8; background: rgba(15, 23, 42, .8); border: 1px solid #334155;
+  border-radius: 10px; padding: 8px 12px; }
+
+#err { position: fixed; inset: 0; display: none; z-index: 20; align-items: center;
+  justify-content: center; background: #0b1020; color: #fca5a5; font-size: 15px;
+  text-align: center; padding: 40px; }
