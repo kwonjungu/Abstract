@@ -1,14 +1,14 @@
-// 노드 그래프 추상화 뷰(③단계).
-// 2D 동네를 흐리게 깔고, 학생이 직접 점(노드)을 찍고 두 점을 이어 그래프를 그린다(자동 연결 없음).
-// 이은 선에는 격자 거리(가로칸+세로칸, 제곱근 없음)가 자동 표시된다.
-const TYPECOLOR = { 집: '#f6ad55', 건물: '#60a5fa', 학교: '#3b82f6', 마트: '#fb923c', 병원: '#f87171' };
+// 노드 그래프 추상화 뷰(③단계) — 자동.
+// 건물 = 동일 크기 동그라미(노드). 건물끼리 최단거리 직선을 자동으로 긋고,
+// 두 선이 교차하는 곳에는 '갈림길' 노드를 자동으로 추가한다. (건물 크기는 무시)
+const NODE_COLOR = '#38bdf8';   // 건물 노드
+const JUNC_COLOR = '#f59e0b';   // 갈림길 노드
 
 export function createNodes(refs) {
   const { state } = refs;
   const cv = document.getElementById('cvnode');
   const ctx = cv.getContext('2d');
   let cell = 24, ox = 0, oy = 0;
-  let hover = null, pending = null; // pending = 연결 시작 노드 id
 
   function layout() {
     const pad = 90;
@@ -18,98 +18,87 @@ export function createNodes(refs) {
     oy = Math.floor((cv.height - g) / 2) + 8;
   }
   function resize() { cv.width = window.innerWidth; cv.height = window.innerHeight; render(); }
-  function cellOf(e) {
-    const r = cv.getBoundingClientRect();
-    const x = (e.clientX - r.left) * cv.width / r.width;
-    const y = (e.clientY - r.top) * cv.height / r.height;
-    const col = Math.floor((x - ox) / cell), row = Math.floor((y - oy) / cell);
-    if (col < 0 || col >= state.N || row < 0 || row >= state.N) return null;
-    return { col, row };
-  }
   const px = (c) => ox + c * cell + cell / 2;
   const py = (r) => oy + r * cell + cell / 2;
-  const nodeAtCell = (c, r) => state.graphNodes.find((n) => n.col === c && n.row === r);
-  const nodeById = (id) => state.graphNodes.find((n) => n.id === id);
-  const manh = (a, b) => Math.abs(a.col - b.col) + Math.abs(a.row - b.row);
+  const center = (b) => ({ c: b.col + (b.w - 1) / 2, r: b.row + (b.d - 1) / 2 });
+
+  // 두 선분(grid 좌표)의 교차점. 내부에서 만나면 점, 아니면 null.
+  function segInt(a, b, c, d) {
+    const d1c = b.c - a.c, d1r = b.r - a.r, d2c = d.c - c.c, d2r = d.r - c.r;
+    const den = d1c * d2r - d1r * d2c;
+    if (Math.abs(den) < 1e-9) return null;
+    const t = ((c.c - a.c) * d2r - (c.r - a.r) * d2c) / den;
+    const u = ((c.c - a.c) * d1r - (c.r - a.r) * d1c) / den;
+    if (t > 0 && t < 1 && u > 0 && u < 1) return { c: a.c + t * d1c, r: a.r + t * d1r };
+    return null;
+  }
 
   function render() {
     layout();
     ctx.fillStyle = '#0b1020'; ctx.fillRect(0, 0, cv.width, cv.height);
-    // 격자 (옅게)
-    ctx.strokeStyle = '#16233c';
-    for (let i = 0; i <= state.N; i++) {
-      ctx.beginPath(); ctx.moveTo(ox + i * cell, oy); ctx.lineTo(ox + i * cell, oy + state.N * cell); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(ox, oy + i * cell); ctx.lineTo(ox + state.N * cell, oy + i * cell); ctx.stroke();
-    }
-    // 참고용 동네(흐리게): 길 + 건물
-    ctx.globalAlpha = 0.22;
-    state.roads.forEach((k) => { const [c, r] = k.split(',').map(Number);
-      ctx.fillStyle = '#94a3b8'; ctx.fillRect(ox + c * cell, oy + r * cell, cell, cell); });
-    state.buildings.forEach((b) => { ctx.fillStyle = TYPECOLOR[b.type] || '#888';
-      ctx.fillRect(ox + b.col * cell, oy + b.row * cell, b.w * cell, b.d * cell); });
-    ctx.globalAlpha = 1;
+    const bs = state.buildings;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    // 간선(선 + 거리)
-    state.graphEdges.forEach((ed) => {
-      const a = nodeById(ed.a), b = nodeById(ed.b); if (!a || !b) return;
-      ctx.strokeStyle = '#5eead4'; ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.moveTo(px(a.col), py(a.row)); ctx.lineTo(px(b.col), py(b.row)); ctx.stroke();
-      const mx = (px(a.col) + px(b.col)) / 2, my = (py(a.row) + py(b.row)) / 2;
-      const t = manh(a, b) + '칸';
-      ctx.font = 'bold 12px 맑은 고딕'; const w = ctx.measureText(t).width + 8;
-      ctx.fillStyle = '#0b1020'; ctx.fillRect(mx - w / 2, my - 9, w, 18);
-      ctx.strokeStyle = '#334155'; ctx.lineWidth = 1; ctx.strokeRect(mx - w / 2, my - 9, w, 18);
-      ctx.fillStyle = '#5eead4'; ctx.fillText(t, mx, my);
-    });
-    // 연결 대기선
-    if (pending != null && hover) { const a = nodeById(pending); if (a) {
-      ctx.strokeStyle = 'rgba(94,234,212,.5)'; ctx.setLineDash([5, 5]); ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.moveTo(px(a.col), py(a.row)); ctx.lineTo(px(hover.col), py(hover.row)); ctx.stroke();
-      ctx.setLineDash([]); } }
-    // 노드(점)
-    state.graphNodes.forEach((n) => {
-      ctx.beginPath(); ctx.arc(px(n.col), py(n.row), 9, 0, 7);
-      ctx.fillStyle = n.id === pending ? '#fbbf24' : '#22d3ee'; ctx.fill();
-      ctx.lineWidth = 2; ctx.strokeStyle = '#0b1020'; ctx.stroke();
-      ctx.fillStyle = '#e2e8f0'; ctx.font = 'bold 10px 맑은 고딕'; ctx.textBaseline = 'bottom';
-      ctx.fillText('N' + n.id, px(n.col), py(n.row) - 11);
-    });
-  }
 
-  function deleteNode(n) {
-    refs.pushHist();
-    state.graphNodes = state.graphNodes.filter((x) => x !== n);
-    state.graphEdges = state.graphEdges.filter((e) => e.a !== n.id && e.b !== n.id);
-    refs.save();
-  }
-
-  cv.addEventListener('pointerdown', (e) => {
-    const c = cellOf(e); if (!c) return;
-    const hit = nodeAtCell(c.col, c.row);
-    if (e.button === 2) { if (hit) { deleteNode(hit); pending = null; render(); } return; }
-    if (hit) {
-      if (pending == null) pending = hit.id;
-      else if (pending !== hit.id) {
-        const ek = [Math.min(pending, hit.id), Math.max(pending, hit.id)].join('-');
-        if (!state.graphEdges.some((x) => [Math.min(x.a, x.b), Math.max(x.a, x.b)].join('-') === ek)) {
-          refs.pushHist(); state.graphEdges.push({ a: pending, b: hit.id }); refs.save();
-        }
-        pending = null;
-      } else pending = null;
-    } else {
-      if (pending != null) pending = null;
-      else { refs.pushHist(); state.graphNodes.push({ id: state.graphCounter++, col: c.col, row: c.row }); refs.save(); }
+    if (bs.length < 2) {
+      ctx.fillStyle = '#64748b'; ctx.font = '15px 맑은 고딕';
+      ctx.fillText('🧊3D / 🟦2D에서 건물을 2개 이상 세우면 자동으로 이어집니다.', cv.width / 2, cv.height / 2);
+      return;
     }
-    render();
-  });
-  cv.addEventListener('pointermove', (e) => { hover = cellOf(e); render(); });
-  cv.addEventListener('pointerleave', () => { hover = null; render(); });
-  cv.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    const ctr = bs.map(center);
+    // 모든 건물 쌍 = 선분
+    const segs = [];
+    for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) segs.push([i, j]);
+
+    // 1) 최단거리 선 + 거리
+    ctx.lineWidth = 2; ctx.strokeStyle = '#475569';
+    segs.forEach(([i, j]) => {
+      const a = ctr[i], b = ctr[j];
+      ctx.beginPath(); ctx.moveTo(px(a.c), py(a.r)); ctx.lineTo(px(b.c), py(b.r)); ctx.stroke();
+      const dd = Math.round(Math.hypot(a.c - b.c, a.r - b.r));
+      const mx = (px(a.c) + px(b.c)) / 2, my = (py(a.r) + py(b.r)) / 2, t = dd + '칸';
+      ctx.font = '11px 맑은 고딕'; const w = ctx.measureText(t).width + 6;
+      ctx.fillStyle = '#0b1020'; ctx.fillRect(mx - w / 2, my - 8, w, 16);
+      ctx.fillStyle = '#94a3b8'; ctx.fillText(t, mx, my);
+    });
+
+    // 2) 선이 교차하는 곳 = 갈림길 노드(자동)
+    const junc = [];
+    for (let s = 0; s < segs.length; s++) for (let u = s + 1; u < segs.length; u++) {
+      const [i, j] = segs[s], [k, l] = segs[u];
+      if (i === k || i === l || j === k || j === l) continue; // 같은 건물 공유 → 제외
+      const p = segInt(ctr[i], ctr[j], ctr[k], ctr[l]);
+      if (p && !junc.some((q) => Math.abs(q.c - p.c) < 0.4 && Math.abs(q.r - p.r) < 0.4)) junc.push(p);
+    }
+    junc.forEach((p) => {
+      ctx.beginPath(); ctx.arc(px(p.c), py(p.r), 6, 0, 7);
+      ctx.fillStyle = JUNC_COLOR; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = '#0b1020'; ctx.stroke();
+    });
+
+    // 3) 건물 노드(동일 크기 동그라미)
+    bs.forEach((b, idx) => {
+      const a = ctr[idx];
+      ctx.beginPath(); ctx.arc(px(a.c), py(a.r), 14, 0, 7);
+      ctx.fillStyle = NODE_COLOR; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = '#0b1020'; ctx.stroke();
+      ctx.fillStyle = '#cbd5e1'; ctx.font = '11px 맑은 고딕'; ctx.textBaseline = 'top';
+      ctx.fillText(b.type, px(a.c), py(a.r) + 18);
+      ctx.textBaseline = 'middle';
+    });
+
+    // 범례
+    ctx.textAlign = 'left'; ctx.font = '12px 맑은 고딕';
+    ctx.fillStyle = NODE_COLOR; ctx.beginPath(); ctx.arc(20, 24, 7, 0, 7); ctx.fill();
+    ctx.fillStyle = '#cbd5e1'; ctx.fillText('건물', 32, 24);
+    ctx.fillStyle = JUNC_COLOR; ctx.beginPath(); ctx.arc(80, 24, 6, 0, 7); ctx.fill();
+    ctx.fillStyle = '#cbd5e1'; ctx.fillText('갈림길', 90, 24);
+    ctx.textAlign = 'center';
+  }
+
   window.addEventListener('resize', () => { if (cv.style.display !== 'none') resize(); });
 
   return {
-    show() { cv.style.display = 'block'; pending = null; resize(); },
-    hide() { cv.style.display = 'none'; pending = null; },
+    show() { cv.style.display = 'block'; resize(); },
+    hide() { cv.style.display = 'none'; },
     render,
   };
 }
