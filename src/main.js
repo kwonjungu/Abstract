@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { wireUI } from './ui.js';
+import { createTwoD } from './twod.js';
 
 const TYPECOLOR = { 집: 0xf6ad55, 건물: 0x60a5fa, 학교: 0x3b82f6, 마트: 0xfb923c, 병원: 0xf87171 };
 
@@ -20,6 +21,7 @@ let renderer, scene, camera, controls, ground, gridHelper, buildingGroup, roadGr
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let down = null, moved = false, painting = false;
+let view = '3d', twoD = null;
 
 function num(id) { return Math.max(1, parseInt(document.getElementById(id).value) || 1); }
 
@@ -72,8 +74,16 @@ function init() {
   renderer.domElement.addEventListener('pointerup', onUp);
   renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
+  twoD = createTwoD({ state, num, footprintFree, buildingCovers, pushHist, save });
   wireUI(api);
   animate();
+}
+
+function setView(v) {
+  view = v;
+  document.querySelectorAll('.vw').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
+  if (v === '2d') { cv.style.display = 'none'; twoD.show(); }
+  else { twoD.hide(); cv.style.display = 'block'; onResize(); redraw(); }
 }
 
 function buildScene() {
@@ -263,6 +273,7 @@ function restore(s) {
   state.buildings = o.buildings; state.roads = new Set(o.roads); state.counter = o.counter;
   if (o.N && o.N !== state.N) { state.N = o.N; document.getElementById('gridN').value = state.N; buildScene(); }
   redraw();
+  if (view === '2d' && twoD) twoD.render();
 }
 function save() { localStorage.setItem('dongne3d', snap()); }
 function load() {
@@ -285,11 +296,15 @@ function animate() { requestAnimationFrame(animate); controls.update(); renderer
 const api = {
   setBuilding(type, emoji) { state.palType = type; state.palEmoji = emoji; state.tool = 'build'; },
   setTool(t) { state.tool = t; },
-  setGrid(n) { state.N = Math.max(8, Math.min(48, n || 25)); buildScene(); redraw(); resetView(); },
+  setGrid(n) { state.N = Math.max(8, Math.min(48, n || 25)); buildScene(); redraw(); resetView(); if (view === '2d') twoD.render(); },
+  setView,
   topView, resetView,
   undo() { const s = state.undoStack.pop(); if (s) restore(s); },
-  clear() { pushHist(); state.buildings = []; state.roads = new Set(); state.counter = 1; redraw(); },
-  png() { renderer.render(scene, camera); const a = document.createElement('a'); a.download = '우리동네_3D.png'; a.href = cv.toDataURL(); a.click(); },
+  clear() { pushHist(); state.buildings = []; state.roads = new Set(); state.counter = 1; redraw(); if (view === '2d') twoD.render(); },
+  png() {
+    if (view === '2d') { const a = document.createElement('a'); a.download = '우리동네_2D.png'; a.href = document.getElementById('cv2d').toDataURL(); a.click(); return; }
+    renderer.render(scene, camera); const a = document.createElement('a'); a.download = '우리동네_3D.png'; a.href = cv.toDataURL(); a.click();
+  },
 };
 
 // ---- 부팅 (모든 선언 이후에 호출해야 TDZ 오류가 없음) ----

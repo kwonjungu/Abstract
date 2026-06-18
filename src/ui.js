@@ -18,6 +18,10 @@ export function wireUI(api) {
     })
   );
 
+  document.querySelectorAll('.vw').forEach((b) =>
+    b.addEventListener('click', () => api.setView(b.dataset.view))
+  );
+
   $('gridN').addEventListener('change', (e) => api.setGrid(parseInt(e.target.value)));
   $('topview').addEventListener('click', () => api.topView());
   $('reset').addEventListener('click', () => api.resetView());

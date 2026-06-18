@@ -21,7 +21,9 @@ input[type=number] { width: 42px; background: #0f172a; color: #e2e8f0;
   border: 1px solid #475569; border-radius: 6px; padding: 4px; }
 label.f { font-size: 11px; color: #cbd5e1; display: flex; align-items: center; gap: 2px; }
 
-#cv { position: fixed; inset: 0; display: block; }
+#cv, #cv2d { position: fixed; inset: 0; display: block; }
+#cv2d { background: #0b1020; cursor: crosshair; }
+button.vw.on { background: #0ea5e9; border-color: #0ea5e9; color: #04293b; font-weight: bold; }
 
 #hud { position: fixed; left: 12px; bottom: 12px; z-index: 10; font-size: 12px;
   color: #94a3b8; background: rgba(15, 23, 42, .8); border: 1px solid #334155;
