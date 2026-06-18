@@ -1,14 +1,15 @@
-// 노드 그래프 추상화 뷰(③단계) — 자동.
-// 건물 = 동일 크기 동그라미(노드). 건물끼리 최단거리 직선을 자동으로 긋고,
-// 두 선이 교차하는 곳에는 '갈림길' 노드를 자동으로 추가한다. (건물 크기는 무시)
-const NODE_COLOR = '#38bdf8';   // 건물 노드
-const JUNC_COLOR = '#f59e0b';   // 갈림길 노드
+// 노드 그래프 추상화 뷰(③단계).
+// 건물 = 단색 동그라미(노드). 학생이 두 건물을 클릭해 직접 잇는다(자동 연결 없음).
+// 선에는 두 건물 사이 거리(격자 칸)가 표시된다. 배경은 비워 깔끔한 노드 트리처럼 보이게 한다.
+const NODE_COLOR = '#38bdf8';
 
 export function createNodes(refs) {
   const { state } = refs;
   const cv = document.getElementById('cvnode');
   const ctx = cv.getContext('2d');
   let cell = 24, ox = 0, oy = 0;
+  let hover = null, pending = null; // pending = 연결 시작 건물 id, hover = {x,y} 화면좌표
+  let pressTimer = null, longFired = false, downPos = null; // 길게 누르기(이름 편집)
 
   function layout() {
     const pad = 90;
@@ -18,87 +19,114 @@ export function createNodes(refs) {
     oy = Math.floor((cv.height - g) / 2) + 8;
   }
   function resize() { cv.width = window.innerWidth; cv.height = window.innerHeight; render(); }
+
   const px = (c) => ox + c * cell + cell / 2;
   const py = (r) => oy + r * cell + cell / 2;
   const center = (b) => ({ c: b.col + (b.w - 1) / 2, r: b.row + (b.d - 1) / 2 });
+  const screenOf = (b) => { const m = center(b); return { x: px(m.c), y: py(m.r) }; };
+  const byId = (id) => state.buildings.find((b) => b.id === id);
+  const dist = (a, b) => { const A = center(a), B = center(b); return Math.round(Math.abs(A.c - B.c) + Math.abs(A.r - B.r)); };
 
-  // 두 선분(grid 좌표)의 교차점. 내부에서 만나면 점, 아니면 null.
-  function segInt(a, b, c, d) {
-    const d1c = b.c - a.c, d1r = b.r - a.r, d2c = d.c - c.c, d2r = d.r - c.r;
-    const den = d1c * d2r - d1r * d2c;
-    if (Math.abs(den) < 1e-9) return null;
-    const t = ((c.c - a.c) * d2r - (c.r - a.r) * d2c) / den;
-    const u = ((c.c - a.c) * d1r - (c.r - a.r) * d1c) / den;
-    if (t > 0 && t < 1 && u > 0 && u < 1) return { c: a.c + t * d1c, r: a.r + t * d1r };
+  function screenPos(e) {
+    const r = cv.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height };
+  }
+  function buildingAt(sx, sy) {
+    for (const b of state.buildings) { const p = screenOf(b); if ((sx - p.x) ** 2 + (sy - p.y) ** 2 <= 18 * 18) return b; }
     return null;
+  }
+  function toggleEdge(a, b) {
+    refs.pushHist();
+    const i = state.graphEdges.findIndex((e) => (e.a === a && e.b === b) || (e.a === b && e.b === a));
+    if (i >= 0) state.graphEdges.splice(i, 1); else state.graphEdges.push({ a, b });
+    refs.save();
   }
 
   function render() {
     layout();
     ctx.fillStyle = '#0b1020'; ctx.fillRect(0, 0, cv.width, cv.height);
-    const bs = state.buildings;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
 
-    if (bs.length < 2) {
-      ctx.fillStyle = '#64748b'; ctx.font = '15px 맑은 고딕';
-      ctx.fillText('🧊3D / 🟦2D에서 건물을 2개 이상 세우면 자동으로 이어집니다.', cv.width / 2, cv.height / 2);
+    if (state.buildings.length === 0) {
+      ctx.fillStyle = '#64748b'; ctx.font = '15px 맑은 고딕'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('먼저 🧊3D / 🟦2D에서 건물을 세우면, 여기서 동그라미로 이어집니다.', cv.width / 2, cv.height / 2);
       return;
     }
 
-    const ctr = bs.map(center);
-    // 모든 건물 쌍 = 선분
-    const segs = [];
-    for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) segs.push([i, j]);
-
-    // 1) 최단거리 선 + 거리
-    ctx.lineWidth = 2; ctx.strokeStyle = '#475569';
-    segs.forEach(([i, j]) => {
-      const a = ctr[i], b = ctr[j];
-      ctx.beginPath(); ctx.moveTo(px(a.c), py(a.r)); ctx.lineTo(px(b.c), py(b.r)); ctx.stroke();
-      const dd = Math.round(Math.hypot(a.c - b.c, a.r - b.r));
-      const mx = (px(a.c) + px(b.c)) / 2, my = (py(a.r) + py(b.r)) / 2, t = dd + '칸';
-      ctx.font = '11px 맑은 고딕'; const w = ctx.measureText(t).width + 6;
-      ctx.fillStyle = '#0b1020'; ctx.fillRect(mx - w / 2, my - 8, w, 16);
-      ctx.fillStyle = '#94a3b8'; ctx.fillText(t, mx, my);
+    // 간선(선 + 거리)
+    state.graphEdges.forEach((ed) => {
+      const a = byId(ed.a), b = byId(ed.b); if (!a || !b) return;
+      const pa = screenOf(a), pb = screenOf(b);
+      ctx.strokeStyle = '#64748b'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+      const mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2, t = dist(a, b) + '칸';
+      ctx.font = 'bold 12px 맑은 고딕'; const w = ctx.measureText(t).width + 10;
+      ctx.fillStyle = '#0b1020'; ctx.fillRect(mx - w / 2, my - 10, w, 20);
+      ctx.strokeStyle = '#334155'; ctx.lineWidth = 1; ctx.strokeRect(mx - w / 2, my - 10, w, 20);
+      ctx.fillStyle = '#e2e8f0'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t, mx, my);
     });
 
-    // 2) 선이 교차하는 곳 = 갈림길 노드(자동)
-    const junc = [];
-    for (let s = 0; s < segs.length; s++) for (let u = s + 1; u < segs.length; u++) {
-      const [i, j] = segs[s], [k, l] = segs[u];
-      if (i === k || i === l || j === k || j === l) continue; // 같은 건물 공유 → 제외
-      const p = segInt(ctr[i], ctr[j], ctr[k], ctr[l]);
-      if (p && !junc.some((q) => Math.abs(q.c - p.c) < 0.4 && Math.abs(q.r - p.r) < 0.4)) junc.push(p);
+    // 연결 대기선(점선)
+    if (pending != null && hover) {
+      const a = byId(pending);
+      if (a) {
+        const pa = screenOf(a);
+        ctx.strokeStyle = 'rgba(56,189,248,.6)'; ctx.setLineDash([6, 6]); ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(hover.x, hover.y); ctx.stroke(); ctx.setLineDash([]);
+      }
     }
-    junc.forEach((p) => {
-      ctx.beginPath(); ctx.arc(px(p.c), py(p.r), 6, 0, 7);
-      ctx.fillStyle = JUNC_COLOR; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = '#0b1020'; ctx.stroke();
-    });
 
-    // 3) 건물 노드(동일 크기 동그라미)
-    bs.forEach((b, idx) => {
-      const a = ctr[idx];
-      ctx.beginPath(); ctx.arc(px(a.c), py(a.r), 14, 0, 7);
-      ctx.fillStyle = NODE_COLOR; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = '#0b1020'; ctx.stroke();
-      ctx.fillStyle = '#cbd5e1'; ctx.font = '11px 맑은 고딕'; ctx.textBaseline = 'top';
-      ctx.fillText(b.type, px(a.c), py(a.r) + 18);
-      ctx.textBaseline = 'middle';
+    // 노드(단색 동그라미)
+    state.buildings.forEach((b) => {
+      const p = screenOf(b);
+      ctx.beginPath(); ctx.arc(p.x, p.y, 14, 0, 7);
+      ctx.fillStyle = b.id === pending ? '#fbbf24' : NODE_COLOR; ctx.fill();
+      ctx.lineWidth = 2.5; ctx.strokeStyle = '#0b1020'; ctx.stroke();
+      ctx.fillStyle = '#cbd5e1'; ctx.font = '11px 맑은 고딕'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText(b.name && b.name.length ? b.name : b.type, p.x, p.y + 18);
     });
-
-    // 범례
-    ctx.textAlign = 'left'; ctx.font = '12px 맑은 고딕';
-    ctx.fillStyle = NODE_COLOR; ctx.beginPath(); ctx.arc(20, 24, 7, 0, 7); ctx.fill();
-    ctx.fillStyle = '#cbd5e1'; ctx.fillText('건물', 32, 24);
-    ctx.fillStyle = JUNC_COLOR; ctx.beginPath(); ctx.arc(80, 24, 6, 0, 7); ctx.fill();
-    ctx.fillStyle = '#cbd5e1'; ctx.fillText('갈림길', 90, 24);
-    ctx.textAlign = 'center';
   }
 
+  function editName(b) {
+    const cur = b.name && b.name.length ? b.name : b.type;
+    const v = window.prompt('노드 이름을 입력하세요', cur);
+    if (v !== null) { refs.pushHist(); b.name = v.trim(); refs.save(); render(); }
+  }
+
+  cv.addEventListener('pointermove', (e) => {
+    hover = screenPos(e);
+    if (pressTimer && downPos) { const dx = hover.x - downPos.x, dy = hover.y - downPos.y;
+      if (dx * dx + dy * dy > 25) { clearTimeout(pressTimer); pressTimer = null; } }
+    render();
+  });
+  cv.addEventListener('pointerleave', () => { hover = null; if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } render(); });
+  cv.addEventListener('pointerdown', (e) => {
+    const s = screenPos(e); const b = buildingAt(s.x, s.y);
+    downPos = s; longFired = false;
+    if (e.button === 2) {           // 우클릭: 이 건물의 선 모두 지우기
+      if (b) { const kept = state.graphEdges.filter((ed) => ed.a !== b.id && ed.b !== b.id);
+        if (kept.length !== state.graphEdges.length) { refs.pushHist(); state.graphEdges = kept; refs.save(); } }
+      pending = null; render(); return;
+    }
+    if (b) { pressTimer = setTimeout(() => { longFired = true; pressTimer = null; editName(b); }, 500); } // 꾹 누르면 이름 편집
+  });
+  cv.addEventListener('pointerup', (e) => {
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+    if (longFired) { longFired = false; return; }   // 길게 눌러 편집함 → 연결 안 함
+    if (e.button === 2) return;
+    const s = screenPos(e); const b = buildingAt(s.x, s.y);
+    if (b) {
+      if (pending == null) pending = b.id;
+      else if (pending !== b.id) { toggleEdge(pending, b.id); pending = null; }
+      else pending = null;
+    } else pending = null;
+    render();
+  });
+  cv.addEventListener('contextmenu', (e) => e.preventDefault());
   window.addEventListener('resize', () => { if (cv.style.display !== 'none') resize(); });
 
   return {
-    show() { cv.style.display = 'block'; resize(); },
-    hide() { cv.style.display = 'none'; },
+    show() { cv.style.display = 'block'; pending = null; resize(); },
+    hide() { cv.style.display = 'none'; pending = null; },
     render,
   };
 }

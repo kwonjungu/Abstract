@@ -319,6 +319,19 @@ const api = {
     if (id) { const a = document.createElement('a'); a.download = '우리동네_' + view + '.png'; a.href = document.getElementById(id).toDataURL(); a.click(); return; }
     renderer.render(scene, camera); const a = document.createElement('a'); a.download = '우리동네_3D.png'; a.href = cv.toDataURL(); a.click();
   },
+  csv() {
+    // 노드(건물)의 위치만 반올림하여 저장
+    let s = '이름,가로,세로\n';
+    state.buildings.forEach((b) => {
+      const x = Math.round(b.col + (b.w - 1) / 2);
+      const y = Math.round(b.row + (b.d - 1) / 2);
+      s += `${b.name && b.name.length ? b.name : b.type},${x},${y}\n`;
+    });
+    const a = document.createElement('a');
+    a.download = '노드_위치.csv';
+    a.href = 'data:text/csv;charset=utf-8,﻿' + encodeURIComponent(s);
+    a.click();
+  },
 };
 
 // ---- 부팅 (모든 선언 이후에 호출해야 TDZ 오류가 없음) ----

@@ -28,4 +28,5 @@ export function wireUI(api) {
   $('undo').addEventListener('click', () => api.undo());
   $('clr').addEventListener('click', () => { if (confirm('전체를 지울까요?')) api.clear(); });
   $('png').addEventListener('click', () => api.png());
+  $('csv').addEventListener('click', () => api.csv());
 }
