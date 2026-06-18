@@ -23,8 +23,11 @@ let down = null, moved = false, painting = false;
 
 function num(id) { return Math.max(1, parseInt(document.getElementById(id).value) || 1); }
 
-try { init(); }
-catch (e) { console.error(e); document.getElementById('err').style.display = 'flex'; }
+function hasWebGL() {
+  try { const c = document.createElement('canvas');
+    return !!(window.WebGLRenderingContext && (c.getContext('webgl') || c.getContext('experimental-webgl'))); }
+  catch (e) { return false; }
+}
 
 function init() {
   renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, preserveDrawingBuffer: true });
@@ -267,3 +270,19 @@ const api = {
   clear() { pushHist(); state.buildings = []; state.roads = new Set(); state.counter = 1; redraw(); },
   png() { renderer.render(scene, camera); const a = document.createElement('a'); a.download = '우리동네_3D.png'; a.href = cv.toDataURL(); a.click(); },
 };
+
+// ---- 부팅 (모든 선언 이후에 호출해야 TDZ 오류가 없음) ----
+if (!hasWebGL()) {
+  const el = document.getElementById('err');
+  el.style.display = 'flex';
+  el.textContent = 'WebGL을 사용할 수 없는 환경입니다. 브라우저의 하드웨어 가속을 켜거나 다른 브라우저에서 열어주세요.';
+} else {
+  try {
+    init();
+  } catch (e) {
+    console.error(e);
+    const el = document.getElementById('err');
+    el.style.display = 'flex';
+    el.innerHTML = '실행 중 오류가 발생했습니다.<br><small style="opacity:.8">' + (e && e.message ? e.message : e) + '</small>';
+  }
+}
