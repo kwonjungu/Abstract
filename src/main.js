@@ -122,6 +122,18 @@ function buildingMats(type, emoji) {
 const w2x = (col, w) => (col + w / 2) - state.N / 2;
 const w2z = (row, d) => (row + d / 2) - state.N / 2;
 
+function buildingCovers(col, row) {
+  return state.buildings.some((b) => col >= b.col && col < b.col + b.w && row >= b.row && row < b.row + b.d);
+}
+function footprintFree(col, row, w, d) {
+  for (let i = 0; i < w; i++) for (let j = 0; j < d; j++) {
+    if (buildingCovers(col + i, row + j)) return false;
+    if (state.roads.has((col + i) + ',' + (row + j))) return false;
+  }
+  return true;
+}
+function flashCell(msg) { document.getElementById('cell').textContent = msg; }
+
 function rebuildBuildings() {
   buildingGroup.clear();
   for (const b of state.buildings) {
@@ -199,6 +211,10 @@ function onMove(e) {
     const d = state.tool === 'build' ? num('bd') : 1;
     hoverMesh.scale.set(w, 1, d);
     hoverMesh.position.set(w2x(c.col, w), 0.12, w2z(c.row, d));
+    let okSpot = true;
+    if (state.tool === 'build') okSpot = footprintFree(c.col, c.row, Math.min(w, state.N - c.col), Math.min(d, state.N - c.row));
+    else if (state.tool === 'road') okSpot = !buildingCovers(c.col, c.row);
+    hoverMesh.material.color.set(okSpot ? 0x22d3ee : 0xef4444);
   } else hoverMesh.visible = false;
 }
 function onUp(e) {
@@ -212,11 +228,15 @@ function onUp(e) {
     } else if (state.tool === 'build') {
       const c = groundCell();
       if (c) {
-        pushHist();
         const w = Math.min(num('bw'), state.N - c.col);
         const d = Math.min(num('bd'), state.N - c.row);
-        state.buildings.push({ id: state.counter++, type: state.palType, emoji: state.palEmoji, col: c.col, row: c.row, w, d, h: num('bh') });
-        redraw();
+        if (!footprintFree(c.col, c.row, w, d)) {
+          flashCell('⛔ 겹침');
+        } else {
+          pushHist();
+          state.buildings.push({ id: state.counter++, type: state.palType, emoji: state.palEmoji, col: c.col, row: c.row, w, d, h: num('bh') });
+          redraw();
+        }
       }
     } else if (state.tool === 'road') {
       setPointer(e); paintRoad();
@@ -227,6 +247,7 @@ function onUp(e) {
 function paintRoad() {
   const c = groundCell();
   if (!c) return;
+  if (buildingCovers(c.col, c.row)) return; // 건물 위에는 길을 칠하지 않음
   const k = c.col + ',' + c.row;
   if (!state.roads.has(k)) {
     if (!painting || state.roads.size === 0) pushHist();
