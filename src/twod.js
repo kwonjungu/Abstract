@@ -40,11 +40,6 @@ export function createTwoD(refs) {
       ctx.fillRect(ox + c * cell, oy + r * cell, cell, cell);
       ctx.strokeStyle = '#0c1830'; ctx.strokeRect(ox + c * cell, oy + r * cell, cell, cell);
     }
-    // 좌표 눈금
-    ctx.fillStyle = '#64748b'; ctx.font = Math.max(8, Math.floor(cell * 0.42)) + 'px 맑은 고딕';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    for (let c = 0; c < state.N; c++) ctx.fillText(c, ox + c * cell + cell / 2, oy - 13);
-    for (let r = 0; r < state.N; r++) ctx.fillText(r, ox - 13, oy + r * cell + cell / 2);
     // 건물(네모로 추상화)
     state.buildings.forEach((b) => {
       const x = ox + b.col * cell, y = oy + b.row * cell, w = b.w * cell, h = b.d * cell;
@@ -52,8 +47,7 @@ export function createTwoD(refs) {
       ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 1.5; ctx.stroke();
       ctx.fillStyle = '#06121b'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = Math.min(cell * 1.1, 26) + 'px serif';
-      ctx.fillText(b.emoji, x + w / 2, y + h / 2 - (cell > 18 ? 6 : 0));
-      if (cell > 16) { ctx.font = '10px 맑은 고딕'; ctx.fillText('(' + b.col + ',' + b.row + ')', x + w / 2, y + h / 2 + cell * 0.42); }
+      ctx.fillText(b.emoji, x + w / 2, y + h / 2);
     });
     // 호버(놓을 수 없으면 빨강)
     if (hover) {

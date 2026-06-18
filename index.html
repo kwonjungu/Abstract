@@ -12,6 +12,7 @@
     <div class="g"><span class="l">보기</span>
       <button class="vw on" data-view="3d">🧊 3D</button>
       <button class="vw" data-view="2d">🟦 2D추상</button>
+      <button class="vw" data-view="node">⚫ 노드</button>
     </div>
     <div class="g"><span class="l">건물</span>
       <button class="pal on" data-type="집" data-emoji="🏠">🏠</button>
@@ -44,8 +45,9 @@
 
   <canvas id="cv"></canvas>
   <canvas id="cv2d" style="display:none"></canvas>
+  <canvas id="cvnode" style="display:none"></canvas>
 
-  <div id="hud">드래그=회전 · 휠=확대 · 클릭=짓기 · 우클릭=지우기 &nbsp;|&nbsp; 칸 (<span id="cell">-</span>)</div>
+  <div id="hud">드래그=회전 · 휠=확대 · 클릭=짓기 · 우클릭=지우기 &nbsp; <span id="cell"></span></div>
   <div id="err">WebGL을 사용할 수 없는 환경입니다. 다른 브라우저에서 열어주세요.</div>
 
   <script type="module" src="/src/main.js"></script>
