@@ -320,12 +320,10 @@ const api = {
     renderer.render(scene, camera); const a = document.createElement('a'); a.download = '우리동네_3D.png'; a.href = cv.toDataURL(); a.click();
   },
   csv() {
-    // 노드(건물)의 위치만 반올림하여 저장
+    // 노드의 위치만 반올림하여 저장
     let s = '이름,가로,세로\n';
-    state.buildings.forEach((b) => {
-      const x = Math.round(b.col + (b.w - 1) / 2);
-      const y = Math.round(b.row + (b.d - 1) / 2);
-      s += `${b.name && b.name.length ? b.name : b.type},${x},${y}\n`;
+    state.graphNodes.forEach((n) => {
+      s += `${n.name && n.name.length ? n.name : 'N' + n.id},${Math.round(n.col)},${Math.round(n.row)}\n`;
     });
     const a = document.createElement('a');
     a.download = '노드_위치.csv';
